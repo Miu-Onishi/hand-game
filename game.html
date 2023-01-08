@@ -1,0 +1,291 @@
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Handpose with Webcam</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@latest/dist/ml5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <h1>ボールお片付けゲーム</h1>
+    <div id="canvas"></div>
+
+    <style type="text/css">
+      div {
+        width: 800;
+        margin-right: auto;
+        margin-left: auto;
+      }
+      h1 {
+        font-family: "Zen Maru Gothic";
+        text-align: CENTER;
+        margin-top: 20px;
+      }
+      * {
+        background-color: rgb(224, 199, 219);
+      }
+    </style>
+    <script>
+      let scene = 0;
+      let handpose;
+      let video;
+      let predictions = [];
+      let facepredictions = [];
+      let facemesh;
+      let neko;
+      let gomiflag = true;
+      //指
+      let haba;
+      let yubiX, yubiY;
+      //ボール
+      let pink;
+      let ball = [];
+      let flag = true;
+      let count;
+
+      //ゴミ箱
+      let gomibako;
+      let gomiX;
+      //グラウンド
+      let ground;
+      //score
+      let score = 0;
+      //時間
+      // let setSec; //Second
+      let remindSec = 40;
+
+      function preload() {
+        pink = loadImage("img/pink.png");
+        gomibako = loadImage("img/gomibako.png");
+        ground = loadImage("img/bg_ground.png");
+        neko = loadImage("img/neko.png");
+      }
+
+      function setup() {
+        let canvas = createCanvas(800, 600);
+        gomiX = random(100, 700);
+        canvas.parent("canvas");
+        video = createCapture(VIDEO);
+        video.size(width, height);
+
+        facemesh = ml5.facemesh(video, modelReady);
+        handpose = ml5.handpose(video, modelReady);
+
+        facemesh.on("predicts", (result) => {
+          facepredictions = result;
+        });
+        handpose.on("predict", (results) => {
+          predictions = results;
+        });
+
+        // Hide the video element, and just show the canvas
+        video.hide();
+        textAlign(CENTER);
+        textSize(11);
+      }
+
+      function modelReady() {
+        console.log("Model ready!");
+        count = 0;
+        flag == true;
+      }
+
+      function draw() {
+        background(255);
+        if (scene == 0) scene0(); //スタート画面
+        if (scene == 1) scene1(); //ゲーム画面
+        if (scene == 2) scene2(); //終了画面
+
+        //スタート画面
+        function scene0() {
+          image(video, 0, 0, width, height);
+          drawFace();
+
+          //グラウンド
+          image(ground, -20, 510, width + 40, 100);
+          //ゴミ箱
+          imageMode(CENTER);
+          image(gomibako, gomiX, 465, 100, 140);
+          imageMode(CORNER);
+          //ボール
+          if (flag == true) {
+            ball.push(new Ball());
+            flag = false;
+          }
+          flag = false;
+          stroke(255);
+          strokeWeight(4);
+          textFont("Zen Maru Gothic");
+          textSize(20);
+          text("1.人差し指と親指でボールを掴もう", 400, 100);
+          text("2.ゴミ箱の上に持ってきたらボールを離そう", 400, 150);
+          text("3.ゴミ箱に入ったらゲーム開始！！！！", 400, 200);
+          fill(0, 0, 255);
+          drawKeypoints();
+
+          fill(0);
+        }
+
+        function scene1() {
+          image(video, 0, 0, width, height);
+          drawFace();
+          //グラウンド
+          image(ground, -20, 510, width + 40, 100);
+          //ゴミ箱
+          imageMode(CENTER);
+          image(gomibako, gomiX, 465, 100, 140);
+          if (remindSec <= 20) {
+            if (gomiflag == true) {
+              gomiX++;
+            } else {
+              gomiX--;
+            }
+          }
+          if (gomiX >= 800) {
+            gomiX = 800;
+            gomiflag = false;
+          } else if (gomiX <= 0) {
+            gomiX = 0;
+            gomiflag = true;
+          }
+
+          imageMode(CORNER);
+          //ボール
+          if (flag == true) {
+            ball.push(new Ball());
+            if (ball.length > 1) {
+              ball.shift();
+              score++;
+              flag = false;
+            }
+            flag = false;
+          }
+          //スコア
+          textAlign(CENTER);
+          strokeWeight(2);
+          stroke(255);
+          textSize(42);
+          text("得点：" + score, 100, 50);
+          //カウントダウン
+          if (scene == 1) {
+            if (frameCount % 60 == 0 && remindSec > 0) {
+              remindSec--;
+            }
+            if (remindSec == 0) {
+              scene = 2;
+            }
+          }
+          text(remindSec, 740, 50);
+
+          imageMode(CORNER);
+          fill(0, 0, 255);
+          drawKeypoints();
+          fill(0);
+        }
+
+        for (let i = 0; i < ball.length; i++) {
+          ball[i].move();
+          ball[i].display();
+          ball[i].hit();
+        }
+
+        function drawKeypoints() {
+          for (let i = 0; i < predictions.length; i += 1) {
+            const prediction = predictions[i];
+
+            noStroke();
+            const keypoint1 = prediction.landmarks[8];
+            const keypoint2 = prediction.landmarks[4];
+            // fill(255, 0, 0);
+            ellipse(keypoint1[0] * 1.25, keypoint1[1] * 1.25, 10, 10);
+            ellipse(keypoint2[0] * 1.25, keypoint2[1] * 1.25, 10, 10);
+            rectMode(CENTER);
+            haba = keypoint1[0] - keypoint2[0];
+            yubiY = keypoint1[1] * 1.25;
+            yubiX = keypoint1[0] * 1.25;
+          }
+        }
+
+        function drawFace() {
+          let haba;
+
+          for (let i = 0; i < facepredictions.length; i += 1) {
+            const keypoints = facepredictions[i].scaledMesh;
+            const [facex, facey] = keypoints[234];
+            const [facex2, facey2] = keypoints[454];
+            haba = facex - facex2;
+
+            imageMode(CENTER);
+            const [x, y] = keypoints[1];
+            image(neko, x * 1.25, y * 1.15, haba * 2.2, haba * 2.2);
+            imageMode(CORNER);
+          }
+        }
+      }
+      function scene2() {
+        background(255);
+        //グラウンド
+        image(ground, -20, 510, width + 40, 100);
+        //ゴミ箱
+        imageMode(CENTER);
+        image(gomibako, gomiX, 465, 100, 140);
+        imageMode(CORNER);
+        stroke(255);
+        strokeWeight(4);
+        textFont("Zen Maru Gothic");
+        textSize(30);
+        text("あなたのスコア：" + score, 400, 300);
+      }
+
+      //ボール
+      class Ball {
+        constructor() {
+          this.x = random(40, 760);
+          this.y = 20;
+          this.bx = random(40, 70);
+          this.by = random(540, 580);
+          this.bsp = +8;
+        }
+        display() {
+          image(pink, this.x, this.y, this.bx, this.bx);
+        }
+        move() {
+          this.y = this.y + this.bsp;
+          if (this.y > this.by - this.bx) {
+            this.y = this.by - this.bx;
+          }
+        }
+
+        //つかみ判定
+        hit() {
+          if (yubiY <= this.y + this.bx && yubiY >= this.y - this.bx) {
+            if (yubiX <= this.x + this.bx && yubiX >= this.x - this.bx) {
+              if (abs(haba) <= this.bx) {
+                this.y = yubiY;
+                this.x = yubiX;
+              }
+            }
+          }
+          //ゴミ箱判定
+          if (
+            this.y >= 400 &&
+            this.y <= 430 &&
+            this.x >= gomiX - this.bx &&
+            this.x <= gomiX + this.bx &&
+            this.bx <= abs(haba)
+          ) {
+            flag = true;
+            if (scene == 0) {
+              scene = 1;
+            }
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
